@@ -25,4 +25,4 @@ pip install -v --no-cache-dir --global-option="--cpp_ext" --global-option="--cud
 cd ../ramble/tacotron2
 
 pip install --upgrade numpy
-python train.py --output_directory=outdir --log_directory=logdir -c tacotron2_statedict.pt --warm_start
+#python train.py --output_directory=outdir --log_directory=logdir -c tacotron2_statedict.pt --warm_start
