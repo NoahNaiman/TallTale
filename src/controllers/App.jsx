@@ -7,6 +7,7 @@ import PanelContainer from "../components/background/PanelContainer";
 import Panel from "../components/background/Panel";
 import Listing from "./Listings/Listing";
 import Preview from "./Preview/Preview";
+import Converter from "./Converter/Converter";
 
 export default class App extends Component {
   constructor(props) {
@@ -40,9 +41,8 @@ export default class App extends Component {
               <Panel>
                 <Preview text={this.state.text}/>
               </Panel>
-              <Panel className="notification is-warning">
-                <p className="title">...tiles</p>
-                <p className="subtitle">Bottom tile</p>
+              <Panel>
+                <Converter text={this.state.text}/>
               </Panel>
             </PanelContainer>
           </Panelizer>

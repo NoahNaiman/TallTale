@@ -6,7 +6,7 @@ export default class Preview extends Component {
             <>
                 <textarea
                     className={`textarea has-fixed-size has-background-primary has-text-light is-light`}
-                    rows="20"
+                    rows="27"
                     value={this.props.text}
                     readOnly/>
             </>
