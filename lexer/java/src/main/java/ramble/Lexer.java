@@ -15,12 +15,14 @@ import java.io.FileInputStream;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.io.Path;
 
 import java.util.Hashtable;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Properties;
+import java.util.Scanner;
 
 import org.apache.tika.exception.TikaException;
 import org.apache.tika.language.LanguageIdentifier;
@@ -90,12 +92,6 @@ public class Lexer{
 	 *	in the format:
 	 *	<\ramble character="SPEAKER_NAME">"Quote spoken by character"<\/ramble><br>
 	 *	5. Fills in all other text surrounding quotes.
-	 * @param bookName
-	 *	A String representing the name of the book to
-	 *	be parsed.
-	 * @param fileType
-	 *	A String representing the type of file to
-	 *	be parsed.
 	 * @return
 	 *	Returns true upon completion
 	 * @throws IOException
@@ -106,7 +102,24 @@ public class Lexer{
 	 *		-Reading in NLP language properties
 	 *		-Outputting tagged text
 	 */
-	public boolean parseBook(String bookName, String fileType) throws IOException{
+	public boolean parseBook() throws IOException{
+		String bookName;
+		Scanner reader = new Scanner(System.in);
+		System.out.println("Use default path of '../corpus/preprocessed/'? [y/n]");
+		String useDefaultPath = reader.nextLine().toLowerCase();
+		if(useDefaultPath.equals("y") || useDefaultPath.equals("yes")){
+			System.out.println("Please enter file name [i.e. JungleBook.txt]: ");
+			bookName = reader.nextLine();
+		}
+		else{
+			System.out.println("Using non-default path. Please enter new file path: ");
+			File file = new File(reader.nextLine());
+			Path path = file.toPath();
+			int pathElements = path.getNameCount();
+			bookName = path.getName(pathElements).toString;
+			System.out.println("Book name is: " + bookName);
+
+		}
 		setBook(bookName, fileType);
 		for(CoreDocument chapter: book){
 			nlp.annotate(chapter);
@@ -199,7 +212,7 @@ public class Lexer{
 	}
 
 	/**
-	 *	Tags all text in novel in one of two ways:in the form of:
+	 *	Tags all text in novel in one of two ways: in the form of:
 	 *	1. <\ramble character="Narrator">General narration text block<\/ramble>
 	 *	2. <\ramble character="SPEAKER_NAME">"Quote spoken by character"<\/ramble>
 	 *	All tagged text is written to filePathOut
