@@ -6,8 +6,23 @@ import Panelizer from "../components/background/Panelizer";
 import PanelContainer from "../components/background/PanelContainer";
 import Panel from "../components/background/Panel";
 import Listing from "./Listings/Listing";
+import Preview from "./Preview/Preview";
 
 export default class App extends Component {
+  constructor(props) {
+    super(props);
+
+    this.state = {
+      text: '',
+    }
+  }
+
+  updateHandler = (text) => {
+    this.setState({
+      text,
+    });
+  };
+
   render() {
     return (
       <>
@@ -18,13 +33,12 @@ export default class App extends Component {
           <Panelizer>
             <PanelContainer className="is-4">
               <Panel>
-                <Listing/>
+                <Listing update={this.updateHandler}/>
               </Panel>
             </PanelContainer>
             <PanelContainer className="is-vertical">
-              <Panel className="notification is-primary">
-                <p className="title">Vertical...</p>
-                <p className="subtitle">Top tile</p>
+              <Panel>
+                <Preview text={this.state.text}/>
               </Panel>
               <Panel className="notification is-warning">
                 <p className="title">...tiles</p>

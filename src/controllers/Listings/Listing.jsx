@@ -1,5 +1,5 @@
 import React, {Component} from 'react';
-import { map } from 'ramda';
+import { map, replace } from 'ramda';
 import Book from "./Book";
 
 const books = require('../../data/books');
@@ -14,6 +14,14 @@ export default class Listing extends Component {
     }
 
     updateHandler = (title) => {
+        const sanitizedPassage = replace(
+            /[mM]r\./g, 'Mister', replace(
+                /[mM]rs\./g, 'Miss', replace(
+                    /[mM]s\./g, 'Miss', books[title]
+                )
+            )
+        );
+        this.props.update(sanitizedPassage);
         this.setState({
             active: title,
         });
