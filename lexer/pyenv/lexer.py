@@ -6,13 +6,29 @@ from subprocess import call
 
 class Lexer:
 	
-	def __init__(self, pathIn = "../../corpus/pre/", pathOut = "../../corpus/post/", oneShot = True):
+	def __init__(self, pathIn = "../../corpus/pre/", pathOut = "../../corpus/post/"):
 		self.textName = ""
 		self.pathIn = pathIn 
 		self.pathOut = pathOut
 		self.bookEnsemble = {}
-		self.language = ""
-		self.oneShot = oneShot
+
+	def read(self):
+		with os.scandir(self.pathIn) as texts:
+			for text in texts:
+				print(text.name)
+				if(text.is_file()):
+					corpus = open(text, "r")
+					
+					language = self.detect_language(corpus)
+					try:
+						nlp = stanfordnlp.Pipeline(lang=language)
+					except:
+						stanfordnlp.download(language)
+						nlp = stanfordnlp.Pipeline(lang=language)
+
+					parsedDoc = nlp(corpus.read())
+					print(parsedDoc)
+
 
 	def detect_language(self, text):
 		"""
@@ -31,15 +47,16 @@ class Lexer:
 		
 		lines = ""
 		counter = 0
-		
+
 		for line in text:
-			line = text.readLine(counter).strip()
-			if(line != ""):
-				lines += line
+			lines += line
+			counter += 1
 			if(counter == 500):
 				break
-			counter += 1
 
 		text.seek(0)
 		language = detect(lines)
 		return(language)
+
+testLex = Lexer()
+testLex.read()
