@@ -15,7 +15,6 @@ import java.io.FileInputStream;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
-import java.io.Path;
 
 import java.util.Hashtable;
 import java.util.ArrayList;
@@ -108,7 +107,8 @@ public class Lexer{
 	 *		-Reading in NLP language properties
 	 *		-Outputting tagged text
 	 */
-	public boolean parse() throws IOException{
+	public boolean parse(String fileName) throws IOException{
+		setBook(fileName);
 		for(CoreDocument chapter: book){
 			nlp.annotate(chapter);
 			tagText(chapter);
@@ -123,6 +123,7 @@ public class Lexer{
 	 *	be parsed.
 	 */
 	private void setBook(String fileName){
+		System.out.println("Setting book!");
 		this.textName = fileName.substring(0, fileName.lastIndexOf('.'));
 		filePathOut = filePathOut + "/marked/" + textName + ".txt";
 
@@ -199,7 +200,7 @@ public class Lexer{
 	/**
 	 *	Tags all text in novel in one of two ways: in the form of:
 	 *	1. <speaker character="Narrator">General narration text block</speaker>
-	 *	2. <speaker character="SPEAKER_NAME">"Quote spoken by character"</speaker>
+	 *	2. <speaker character="[SPEAKER_NAME]">"Quote spoken by character"</speaker>
 	 *	All tagged text is written to filePathOut
 	 *	@param chapter
 	 *	 A fully annotated CoreDocument including tokenization, quotations,
@@ -216,12 +217,18 @@ public class Lexer{
 
 			List<CoreLabel> words = chapter.tokens();
 			List<CoreQuote> quotes = chapter.quotes();
-			for(int i = 0; i < words.size(); i++){
-				String token = words.get(i).word();
 
-				if(i == 0 && !token.equals("``")){
-					writer.write(openTag + "Narrator\">");
-				}
+			String token = words.get(0).word();
+
+			/* One time check to see if text begins with quote or narration */
+			if(!token.equals("``")){
+				writer.write(openTag + "Narrator\">");
+			}
+
+			for(int i = 0; i < words.size(); i++){
+
+				token = words.get(i).word();
+
 				if(inQuote && token.equals("''")){
 					writer.write(openTag + "Narrator\">");
 					inQuote = false;
@@ -233,7 +240,7 @@ public class Lexer{
 					inQuote = true;
 				}
 				else if(!inQuote){
-					writer.write(token + " ");
+					writer.write(token " ");
 				}
 			}
 

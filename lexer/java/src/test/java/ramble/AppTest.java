@@ -14,7 +14,7 @@ public class AppTest{
     @Test
     public void shouldAnswerWithTrue() throws IOException{
         Lexer testLexer = new Lexer();
-    	testLexer.parseBook("JungleBook", ".txt");
+    	testLexer.parse("JungleBook.txt");
         assertTrue(true);
     }
 }
