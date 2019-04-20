@@ -31,9 +31,8 @@ import org.xml.sax.SAXException;
 
 /**
  * <h1>Lexer Class</h1>
- *	Takes in one or several files
- *	representing books. These files
- *	are then parsed appropriately
+ *	Takes in one or several text files
+ *. These are then parsed appropriately
  *	before being tagged by speaker
  *	and output into a new text file.<br>
  *	Takes heavy advantage of the
@@ -41,7 +40,7 @@ import org.xml.sax.SAXException;
  *	Software, and we would like to
  *	thank the Stanford team for their
  *	excellent work.
- *	@see stanfordnlp.github.io/CoreNLP/index.html
+ *	@see stanfordnlp.github.io/CoreNLP
  *
  *	@author Noah Naiman
  *	@author Jorge Nario
@@ -57,9 +56,9 @@ public class Lexer{
      ****************************/
 
 	private ArrayList<CoreDocument> book;
-	private Hashtable<String, String> bookEnsemble;
+	private Hashtable<String, String> ensemble;
 	private StanfordCoreNLP nlp;
-	private String bookName;
+	private String textName;
 	private String filePathIn;
 	private String filePathOut;
 	private String language;
@@ -69,10 +68,17 @@ public class Lexer{
      ****************************/
 
 	public Lexer(){
-		this.filePathIn = "../corpus/preprocessed/";
-		this.filePathOut = "../corpus/postprocessed/";
+		this.filePathIn = "../../corpus/pre/";
+		this.filePathOut = "../../corpus/post/";
 		book = new ArrayList<>();
-		bookEnsemble = new Hashtable<>();
+		ensemble = new Hashtable<>();
+	}
+
+	public Lexer(String inPath, String outPath){
+		this.filePathIn = inPath;
+		this.filePathOut = outPath;
+		book = new ArrayList<>();
+		ensemble = new Hashtable<>();
 	}
 
 	/****************************
@@ -90,7 +96,7 @@ public class Lexer{
 	 *		--NOTE: This may take a while, ~30-60 minutes.<br>
 	 *	4. Outputs all quotes to a postprocessed file 
 	 *	in the format:
-	 *	<\ramble character="SPEAKER_NAME">"Quote spoken by character"<\/ramble><br>
+	 *	<speaker character="SPEAKER_NAME">"Quote spoken by character"</speaker><br>
 	 *	5. Fills in all other text surrounding quotes.
 	 * @return
 	 *	Returns true upon completion
@@ -102,25 +108,7 @@ public class Lexer{
 	 *		-Reading in NLP language properties
 	 *		-Outputting tagged text
 	 */
-	public boolean parseBook() throws IOException{
-		String bookName;
-		Scanner reader = new Scanner(System.in);
-		System.out.println("Use default path of '../corpus/preprocessed/'? [y/n]");
-		String useDefaultPath = reader.nextLine().toLowerCase();
-		if(useDefaultPath.equals("y") || useDefaultPath.equals("yes")){
-			System.out.println("Please enter file name [i.e. JungleBook.txt]: ");
-			bookName = reader.nextLine();
-		}
-		else{
-			System.out.println("Using non-default path. Please enter new file path: ");
-			File file = new File(reader.nextLine());
-			Path path = file.toPath();
-			int pathElements = path.getNameCount();
-			bookName = path.getName(pathElements).toString;
-			System.out.println("Book name is: " + bookName);
-
-		}
-		setBook(bookName, fileType);
+	public boolean parse() throws IOException{
 		for(CoreDocument chapter: book){
 			nlp.annotate(chapter);
 			tagText(chapter);
@@ -129,41 +117,38 @@ public class Lexer{
 	}
 
 	/**
-	 *	Sets the name of the book to be be processed
-	 *	followed by a call to set all NLP options.
-	 * @param bookName
-	 *	A String representing the name of the book to
-	 *	be parsed.
-	 * @param fileType
-	 *	A String representing the type of file to
+	 *	Sets the name of the text to be be processed
+	 * @param textName
+	 *	A String representing the name of a text to
 	 *	be parsed.
 	 */
-	private void setBook(String bookName, String fileType){
-		this.bookName = bookName;
-		filePathIn = filePathIn + bookName + fileType;
-		filePathOut = filePathOut + bookName + fileType;
+	private void setBook(String fileName){
+		this.textName = fileName.substring(0, fileName.lastIndexOf('.'));
+		filePathOut = filePathOut + "/marked/" + textName + ".txt";
 
 		try{
-			File textFile = new File(filePathIn);
+			File textFile = new File(filePathIn + fileName);
 			BufferedReader reader = new BufferedReader(new FileReader(textFile));
-			String plaintext = new String();
+			StringBuilder plaintext = new StringBuilder("");
 
 			String line;
 			while((line = reader.readLine()) != null){
-				if(line.contains("0xRAMBLE")){
-					book.add(new CoreDocument(plaintext));
-					plaintext = "";
+				if(line.contains("<===========0xC4A87E2===========>")){
+					book.add(new CoreDocument(plaintext.toString()));
+					plaintext.setLength(0);
 				}
 				else{
-					plaintext += (line+'\n');
+					plaintext.append(line+'\n');
 				}
 			}
-			book.add(new CoreDocument(plaintext));
 
-			setNLP(plaintext);
+			String plaintextStr = plaintext.toString();
+
+			book.add(new CoreDocument(plaintextStr));
+			setNLP(plaintextStr);
 		}
 		catch(IOException e){
-			System.out.println("ERROR IO exception caught: " + e);
+			System.out.println("ERROR: " + e);
 		}
 	}
 
@@ -199,7 +184,7 @@ public class Lexer{
 						nlpProperties.load(IOUtils.readerFromString("StanfordCoreNLP-spanish.properties"));
 						break;	
 					default:
-						System.out.println("ERROR language " + language + " is not currently handled.\nExiting program to prevent loss and/or waste of resources.");
+						System.out.println("ERROR: language " + language + " is not currently handled.\nExiting program to prevent loss and waste of resources.");
 						System.exit(1);
 				}
 			}
@@ -207,14 +192,14 @@ public class Lexer{
 			nlp = new StanfordCoreNLP(nlpProperties);
 		}
 		catch(IOException e){
-			System.out.println("ERROR IO exception caught: " + e);
+			System.out.println("ERROR: " + e);
 		}
 	}
 
 	/**
 	 *	Tags all text in novel in one of two ways: in the form of:
-	 *	1. <\ramble character="Narrator">General narration text block<\/ramble>
-	 *	2. <\ramble character="SPEAKER_NAME">"Quote spoken by character"<\/ramble>
+	 *	1. <speaker character="Narrator">General narration text block</speaker>
+	 *	2. <speaker character="SPEAKER_NAME">"Quote spoken by character"</speaker>
 	 *	All tagged text is written to filePathOut
 	 *	@param chapter
 	 *	 A fully annotated CoreDocument including tokenization, quotations,
@@ -223,8 +208,8 @@ public class Lexer{
 	private void tagText(CoreDocument chapter){
 		try{
 			BufferedWriter writer = new BufferedWriter(new FileWriter(filePathOut, true));
-			String openTag = "<ramble character=\"";
-			String closeTag = "</ramble>";
+			String openTag = "<speaker=\"";
+			String closeTag = "</speaker>";
 
 			boolean inQuote = false;
 			int quoteNumber = 0;
@@ -259,7 +244,7 @@ public class Lexer{
 			writer.close();
 		}
 		catch(IOException e){
-			System.out.println("ERROR IO exception caught: " + e);
+			System.out.println("ERROR: " + e);
 		}
 	}
 
