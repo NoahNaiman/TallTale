@@ -1,5 +1,6 @@
 import os
 import stanfordnlp
+from stanfordnlp.server import CoreNLPClient
 from collections import Counter
 from langdetect import detect
 from subprocess import call
@@ -24,10 +25,10 @@ class Lexer:
 						nlp = stanfordnlp.Pipeline(lang=language)
 					except:
 						stanfordnlp.download(language)
-						nlp = stanfordnlp.Pipeline(lang=language)
-
-					parsedDoc = nlp(corpus.read())
-					print(parsedDoc)
+						nlp = stanfordnlp.Pipeline(lang=language, use_gpu=True)
+					with CoreNLPClient(annotators=['tokenize','ssplit','pos','lemma','ner', 'parse', 'depparse','coref'], timeout=30000, memory='16G') as client:
+						parsedDoc = client.annotate(corpus.read())
+						print(parsedDoc.sentences[0].print_dependencies())
 
 
 	def detect_language(self, text):
