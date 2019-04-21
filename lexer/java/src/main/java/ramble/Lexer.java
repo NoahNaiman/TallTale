@@ -16,16 +16,19 @@ import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 
+
+import java.nio.file.DirectoryStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+
 import java.util.ArrayList;
-import java.util.concurrent;
+import java.util.concurrent.Semaphore;
 import java.util.Hashtable;
 import java.util.List;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.Scanner;
-
-import org.apache.tika.exception.TikaException;
-import org.apache.tika.language.LanguageIdentifier;
 
 import org.xml.sax.SAXException;
 
@@ -56,7 +59,7 @@ public class Lexer{
 
 	private ArrayList<CoreDocument> book;
 	private Hashtable<String, String> ensemble;
-	private Sempahore directoryLock;
+	private Semaphore directoryLock;
 	private StanfordCoreNLP nlp;
 	private String textName;
 	private String filePathIn;
@@ -67,7 +70,7 @@ public class Lexer{
      *		Initializer(s)		*
      ****************************/
 
-	public Lexer(Sempahore directoryLock, String language){
+	public Lexer(Semaphore directoryLock, String language){
 		language = language.toLowerCase();
 		switch(language){
 					case "arabic":
@@ -75,6 +78,9 @@ public class Lexer{
 						break;
 					case "chinese":
 						this.language = "zh";
+						break;
+					case "english":
+						this.language = "en";
 						break;
 					case "french":
 						this.language = "fr";
@@ -93,7 +99,7 @@ public class Lexer{
 		book = new ArrayList<>();
 		ensemble = new Hashtable<>();
 		this.filePathIn = "../../corpus/pre/" + language + "/";
-		this.filePathOut = "../../corpus/post/" + language "/";
+		this.filePathOut = "../../corpus/post/" + language + "/";
 		this.directoryLock = directoryLock;
 	}
 
@@ -120,13 +126,16 @@ public class Lexer{
 	 *	Throws exception if an error occurs while
 	 *	reading or writing pre or post-parsed text.
 	 */
-	public boolean parse() throws IOException{
-		setText(selectText());
-		// for(CoreDocument chapter: book){
-		// 	nlp.annotate(chapter);
-		// 	tagText(chapter);
-		// }
-		// cleanUp();
+	public boolean parse() throws InterruptedException, IOException{
+		File text;
+		while((text = selectText()) != null){
+			setText(text);
+			for(CoreDocument chapter: book){
+				nlp.annotate(chapter);
+				tagText(chapter);
+			}
+			cleanUp();
+		}
 		return(true);
 	}
 
@@ -136,22 +145,41 @@ public class Lexer{
 		return(true);
 	}
 
-	private File selectText(){
-		directoryLock.aquire();
+	private File selectText() throws InterruptedException, IOException{
+		try{
+			directoryLock.acquire();
+		}
+		catch(InterruptedException e){
+	    	throw(e);
+	    }
 
-		try(DirectoryStream<Path> stream = Files.newDirectoryStream(filePathIn)){
-			Path textPath = stream.next();
+		Path textPath = null;
+		try(DirectoryStream<Path> stream = Files.newDirectoryStream(Paths.get(filePathIn))){
+       		for(Path entry: stream) {
+            	textPath = entry;
+            	break;
+        	}
         	stream.close();
     	}
-    	catch(DirectoryIteratorException e){
+    	catch(IOException e){
            // I/O error encounted during the iteration, the cause is an IOException
-           throw(e.getCause());
-       }
+           throw(e);
+    	}
 
-    	String fileName = textPath.toString();
+    	if(textPath == null){
+    		return(null);
+    	}
+    	
+    	String fileName = textPath.toFile().getName();
     	this.textName = fileName.substring(0, fileName.lastIndexOf('.'));
 
     	File newDir = new File(filePathOut + textName);
+
+    	/* TODO: MODIFY TO DEAL WITH TEXTS OF THE SAME NAME!
+    	if (Files.exists(newDir)) {
+		    FileUtils.cleanDirectory( new File("/dir/path"));
+		} */
+
     	newDir.mkdirs();
 
     	textPath = Files.move(textPath, Paths.get(filePathOut + textName + "/original.txt")); 
@@ -169,7 +197,7 @@ public class Lexer{
 	 *	A String representing the name of a text to
 	 *	be parsed.
 	 */
-	private void setText(File textFile){
+	private void setText(File textFile) throws IOException{
 		try{
 			BufferedReader reader = new BufferedReader(new FileReader(textFile));
 			StringBuilder plaintext = new StringBuilder("");
@@ -193,7 +221,7 @@ public class Lexer{
 			}
 		}
 		catch(IOException e){
-			System.out.println("ERROR: " + e);
+			throw(e);
 		}
 	}
 
@@ -204,14 +232,13 @@ public class Lexer{
 	 *	A String representing the plaintext of
 	 * 	the book to be processed
 	 */
-	private void setNLP(String plaintext){
+	private void setNLP(String plaintext) throws IOException{
 		Properties nlpProperties = new Properties();
 		nlpProperties.setProperty("annotators", "tokenize, ssplit, pos, lemma, ner, parse, coref, quote");
 		nlpProperties.setProperty("coref.algorithm", "neural");
 
 		try{
 			if(!language.equals("en")){
-				language = new LanguageIdentifier(plaintext).getLanguage();
 
 				//CURRENTLY UNTESTED ON NON-ENGLISH TEXTS!!!
 				switch(language){
@@ -252,7 +279,7 @@ public class Lexer{
 	 *	 A fully annotated CoreDocument including tokenization, quotations,
 	 *	 and coreferences.
 	 */
-	private void tagText(CoreDocument chapter){
+	private void tagText(CoreDocument chapter) throws IOException{
 		try{
 			BufferedWriter writer = new BufferedWriter(new FileWriter(filePathOut, true));
 			String openTag = "<speaker=\"";
@@ -286,7 +313,7 @@ public class Lexer{
 					inQuote = true;
 				}
 				else if(!inQuote){
-					writer.write(token " ");
+					writer.write(token + " ");
 				}
 			}
 
@@ -297,7 +324,7 @@ public class Lexer{
 			writer.close();
 		}
 		catch(IOException e){
-			System.out.println("ERROR: " + e);
+			throw(e);
 		}
 	}
 
