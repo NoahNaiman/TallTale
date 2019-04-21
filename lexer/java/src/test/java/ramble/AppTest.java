@@ -13,8 +13,8 @@ public class AppTest{
      */
     @Test
     public void shouldAnswerWithTrue() throws IOException{
-        Lexer testLexer = new Lexer();
-    	testLexer.parse("JungleBook.txt");
+    	Semaphore englishLock = new Semaphore(1);
+        Lexer testLexer = new Lexer(englishLock, "english");
         assertTrue(true);
     }
 }
