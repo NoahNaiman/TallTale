@@ -16,30 +16,33 @@ import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 
-import java.util.Hashtable;
+
+import java.nio.file.DirectoryStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+
 import java.util.ArrayList;
+import java.util.concurrent.Semaphore;
+import java.util.Hashtable;
 import java.util.List;
 import java.util.Optional;
 import java.util.Properties;
-
-import org.apache.tika.exception.TikaException;
-import org.apache.tika.language.LanguageIdentifier;
+import java.util.Scanner;
 
 import org.xml.sax.SAXException;
 
 /**
  * <h1>Lexer Class</h1>
- *	Takes in one or several files
- *	representing books. These files
- *	are then parsed appropriately
- *	before being tagged by speaker
+ *  Used to parse text files
+ *	before quotes are tagged by speaker
  *	and output into a new text file.<br>
  *	Takes heavy advantage of the
  *	Stanford CoreNLP Natural Language
  *	Software, and we would like to
  *	thank the Stanford team for their
  *	excellent work.
- *	@see stanfordnlp.github.io/CoreNLP/index.html
+ *	@see stanfordnlp.github.io/CoreNLP
  *
  *	@author Noah Naiman
  *	@author Jorge Nario
@@ -55,9 +58,10 @@ public class Lexer{
      ****************************/
 
 	private ArrayList<CoreDocument> book;
-	private Hashtable<String, String> bookEnsemble;
+	private Hashtable<String, String> ensemble;
+	private Semaphore directoryLock;
 	private StanfordCoreNLP nlp;
-	private String bookName;
+	private String textName;
 	private String filePathIn;
 	private String filePathOut;
 	private String language;
@@ -66,11 +70,37 @@ public class Lexer{
      *		Initializer(s)		*
      ****************************/
 
-	public Lexer(){
-		this.filePathIn = "../corpus/preprocessed/";
-		this.filePathOut = "../corpus/postprocessed/";
+	public Lexer(Semaphore directoryLock, String language){
+		language = language.toLowerCase();
+		switch(language){
+					case "arabic":
+						this.language = "ar";
+						break;
+					case "chinese":
+						this.language = "zh";
+						break;
+					case "english":
+						this.language = "en";
+						break;
+					case "french":
+						this.language = "fr";
+						break;
+					case "german":
+						this.language = "de";
+						break;
+					case "spanish":
+						this.language = "es";
+						break;	
+					default:
+						System.out.println("ERROR: " + language + " is not currently handled.\nExiting program to prevent loss and waste of resources.");
+						System.exit(1);
+		}
+
 		book = new ArrayList<>();
-		bookEnsemble = new Hashtable<>();
+		ensemble = new Hashtable<>();
+		this.filePathIn = "../../corpus/pre/" + language + "/";
+		this.filePathOut = "../../corpus/post/" + language + "/";
+		this.directoryLock = directoryLock;
 	}
 
 	/****************************
@@ -88,69 +118,110 @@ public class Lexer{
 	 *		--NOTE: This may take a while, ~30-60 minutes.<br>
 	 *	4. Outputs all quotes to a postprocessed file 
 	 *	in the format:
-	 *	<\ramble character="SPEAKER_NAME">"Quote spoken by character"<\/ramble><br>
+	 *	<speaker character="SPEAKER_NAME">"Quote spoken by character"</speaker><br>
 	 *	5. Fills in all other text surrounding quotes.
-	 * @param bookName
-	 *	A String representing the name of the book to
-	 *	be parsed.
-	 * @param fileType
-	 *	A String representing the type of file to
-	 *	be parsed.
 	 * @return
 	 *	Returns true upon completion
 	 * @throws IOException
 	 *	Throws exception if an error occurs while
 	 *	reading or writing pre or post-parsed text.
-	 *	Possible points of error are:<br>
-	 *		-Reading in text of book
-	 *		-Reading in NLP language properties
-	 *		-Outputting tagged text
 	 */
-	public boolean parseBook(String bookName, String fileType) throws IOException{
-		setBook(bookName, fileType);
-		for(CoreDocument chapter: book){
-			nlp.annotate(chapter);
-			tagText(chapter);
+	public boolean parse() throws InterruptedException, IOException{
+		File text;
+		while((text = selectText()) != null){
+			setText(text);
+			for(CoreDocument chapter: book){
+				nlp.annotate(chapter);
+				tagText(chapter);
+			}
+			cleanUp();
 		}
-		return true;
+		return(true);
+	}
+
+	private boolean cleanUp(){
+		book.clear();
+		ensemble.clear();
+		return(true);
+	}
+
+	private File selectText() throws InterruptedException, IOException{
+		try{
+			directoryLock.acquire();
+		}
+		catch(InterruptedException e){
+	    	throw(e);
+	    }
+
+		Path textPath = null;
+		try(DirectoryStream<Path> stream = Files.newDirectoryStream(Paths.get(filePathIn))){
+       		for(Path entry: stream) {
+            	textPath = entry;
+            	break;
+        	}
+        	stream.close();
+    	}
+    	catch(IOException e){
+           // I/O error encounted during the iteration, the cause is an IOException
+           throw(e);
+    	}
+
+    	if(textPath == null){
+    		return(null);
+    	}
+    	
+    	String fileName = textPath.toFile().getName();
+    	this.textName = fileName.substring(0, fileName.lastIndexOf('.'));
+
+    	File newDir = new File(filePathOut + textName);
+
+    	/* TODO: MODIFY TO DEAL WITH TEXTS OF THE SAME NAME!
+    	if (Files.exists(newDir)) {
+		    FileUtils.cleanDirectory( new File("/dir/path"));
+		} */
+
+    	newDir.mkdirs();
+
+    	textPath = Files.move(textPath, Paths.get(filePathOut + textName + "/original.txt")); 
+
+    	filePathOut = filePathOut + textName + "/" + textName + ".txt";
+
+		directoryLock.release();
+
+		return(textPath.toFile());
 	}
 
 	/**
-	 *	Sets the name of the book to be be processed
-	 *	followed by a call to set all NLP options.
-	 * @param bookName
-	 *	A String representing the name of the book to
-	 *	be parsed.
-	 * @param fileType
-	 *	A String representing the type of file to
+	 *	Sets the text to be be processed
+	 * @param textName
+	 *	A String representing the name of a text to
 	 *	be parsed.
 	 */
-	private void setBook(String bookName, String fileType){
-		this.bookName = bookName;
-		filePathIn = filePathIn + bookName + fileType;
-		filePathOut = filePathOut + bookName + fileType;
-
+	private void setText(File textFile) throws IOException{
 		try{
-			File textFile = new File(filePathIn);
 			BufferedReader reader = new BufferedReader(new FileReader(textFile));
-			String plaintext = new String();
+			StringBuilder plaintext = new StringBuilder("");
 
 			String line;
 			while((line = reader.readLine()) != null){
-				if(line.contains("0xRAMBLE")){
-					book.add(new CoreDocument(plaintext));
-					plaintext = "";
+				if(line.contains("<============0xC4A87E2============>")){
+					book.add(new CoreDocument(plaintext.toString()));
+					plaintext.setLength(0);
 				}
 				else{
-					plaintext += (line+'\n');
+					plaintext.append(line+'\n');
 				}
 			}
-			book.add(new CoreDocument(plaintext));
 
-			setNLP(plaintext);
+			String plaintextStr = plaintext.toString();
+
+			book.add(new CoreDocument(plaintextStr));
+			if(nlp == null){
+				setNLP(plaintextStr);
+			}
 		}
 		catch(IOException e){
-			System.out.println("ERROR IO exception caught: " + e);
+			throw(e);
 		}
 	}
 
@@ -161,14 +232,15 @@ public class Lexer{
 	 *	A String representing the plaintext of
 	 * 	the book to be processed
 	 */
-	private void setNLP(String plaintext){
+	private void setNLP(String plaintext) throws IOException{
 		Properties nlpProperties = new Properties();
 		nlpProperties.setProperty("annotators", "tokenize, ssplit, pos, lemma, ner, parse, coref, quote");
 		nlpProperties.setProperty("coref.algorithm", "neural");
 
-		language = new LanguageIdentifier(plaintext).getLanguage();
 		try{
 			if(!language.equals("en")){
+
+				//CURRENTLY UNTESTED ON NON-ENGLISH TEXTS!!!
 				switch(language){
 					case "ar":
 						nlpProperties.load(IOUtils.readerFromString("StanfordCoreNLP-arabic.properties"));
@@ -186,7 +258,7 @@ public class Lexer{
 						nlpProperties.load(IOUtils.readerFromString("StanfordCoreNLP-spanish.properties"));
 						break;	
 					default:
-						System.out.println("ERROR language " + language + " is not currently handled.\nExiting program to prevent loss and/or waste of resources.");
+						System.out.println("ERROR: language " + language + " is not currently handled.\nExiting program to prevent loss and waste of resources.");
 						System.exit(1);
 				}
 			}
@@ -194,36 +266,42 @@ public class Lexer{
 			nlp = new StanfordCoreNLP(nlpProperties);
 		}
 		catch(IOException e){
-			System.out.println("ERROR IO exception caught: " + e);
+			System.out.println("ERROR: " + e);
 		}
 	}
 
 	/**
-	 *	Tags all text in novel in one of two ways:in the form of:
-	 *	1. <\ramble character="Narrator">General narration text block<\/ramble>
-	 *	2. <\ramble character="SPEAKER_NAME">"Quote spoken by character"<\/ramble>
+	 *	Tags all text in novel in one of two ways: in the form of:
+	 *	1. <speaker character="Narrator">General narration text block</speaker>
+	 *	2. <speaker character="[SPEAKER_NAME]">"Quote spoken by character"</speaker>
 	 *	All tagged text is written to filePathOut
 	 *	@param chapter
 	 *	 A fully annotated CoreDocument including tokenization, quotations,
 	 *	 and coreferences.
 	 */
-	private void tagText(CoreDocument chapter){
+	private void tagText(CoreDocument chapter) throws IOException{
 		try{
 			BufferedWriter writer = new BufferedWriter(new FileWriter(filePathOut, true));
-			String openTag = "<ramble character=\"";
-			String closeTag = "</ramble>";
+			String openTag = "<speaker=\"";
+			String closeTag = "</speaker>";
 
 			boolean inQuote = false;
 			int quoteNumber = 0;
 
 			List<CoreLabel> words = chapter.tokens();
 			List<CoreQuote> quotes = chapter.quotes();
-			for(int i = 0; i < words.size(); i++){
-				String token = words.get(i).word();
 
-				if(i == 0 && !token.equals("``")){
-					writer.write(openTag + "Narrator\">");
-				}
+			String token = words.get(0).word();
+
+			/* One time check to see if text begins with quote or narration */
+			if(!token.equals("``")){
+				writer.write(openTag + "Narrator\">");
+			}
+
+			for(int i = 0; i < words.size(); i++){
+
+				token = words.get(i).word();
+
 				if(inQuote && token.equals("''")){
 					writer.write(openTag + "Narrator\">");
 					inQuote = false;
@@ -246,7 +324,7 @@ public class Lexer{
 			writer.close();
 		}
 		catch(IOException e){
-			System.out.println("ERROR IO exception caught: " + e);
+			throw(e);
 		}
 	}
 
